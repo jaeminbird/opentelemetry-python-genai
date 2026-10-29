@@ -72,14 +72,14 @@ def test_completion_hook_defaults_to_load_completion_hook(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("content_capture", ["NO_CONTENT", "SPAN_ONLY"])
-async def test_completion_hook_not_invoked_for_local_agent(
+async def test_completion_hook_invoked(
     runner_module,
     tracer_provider,
     logger_provider,
     meter_provider,
     content_capture,
 ):
-    """The completion hook is not called for local agent invocations."""
+    """The hook's on_completion is called once the turn's stream is drained."""
     hook = MagicMock()
     with instrument(
         QwenPawInstrumentor(),
@@ -98,4 +98,12 @@ async def test_completion_hook_not_invoked_for_local_agent(
             ):
                 pass
 
-    hook.on_completion.assert_not_called()
+    hook.on_completion.assert_called_once()
+    assert hook.on_completion.call_args.kwargs["span"] is not None
+    assert (
+        hook.on_completion.call_args.kwargs["inputs"][0].parts[0].content
+        == "/stop"
+    )
+    output = hook.on_completion.call_args.kwargs["outputs"][0]
+    assert output.parts[0].content == "hooked"
+    assert output.finish_reason is None

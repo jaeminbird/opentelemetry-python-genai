@@ -22,10 +22,7 @@ from opentelemetry.util.genai._invocation import (
     GenAIInvocation,
     get_content_attributes,
 )
-from opentelemetry.util.genai.completion_hook import (
-    CompletionHook,
-    _NoOpCompletionHook,
-)
+from opentelemetry.util.genai.completion_hook import CompletionHook
 from opentelemetry.util.genai.types import (
     InputMessage,
     MessagePart,
@@ -404,6 +401,12 @@ class AgentInvocation(GenAIInvocation, ABC):
         attributes.update(self._get_content_attributes_for_span())
         attributes.update(self.attributes)
         self.span.set_attributes(attributes)
+        self._call_completion_hook(
+            inputs=self.input_messages,
+            outputs=self.output_messages,
+            system_instruction=self.system_instruction,
+            tool_definitions=self.tool_definitions,
+        )
         self._record_metrics()
 
     @abstractmethod
@@ -438,7 +441,7 @@ class LocalAgentInvocation(AgentInvocation):
             tracer,
             instruments,
             logger,
-            _NoOpCompletionHook(),
+            completion_hook,
             span_kind=SpanKind.INTERNAL,
             request_model=request_model,
             agent_name=agent_name,
@@ -694,15 +697,6 @@ class RemoteAgentInvocation(AgentInvocation):
                 self._data.usage_output_tokens
             )
         return counts
-
-    def _apply_finish(self, error: Error | None = None) -> None:
-        super()._apply_finish(error)
-        self._call_completion_hook(
-            inputs=self.input_messages,
-            outputs=self.output_messages,
-            system_instruction=self.system_instruction,
-            tool_definitions=self.tool_definitions,
-        )
 
     def _record_metrics(self) -> None:
         self._record_client_metrics()
